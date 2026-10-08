@@ -150,6 +150,15 @@ Settings for the Gemini provider (`provider = "gemini"`).
 |-----|------|---------|-------------|
 | `explicit_prompt_caching` | bool | `false` | Use explicit caching hints in requests. |
 
+#### `[ai.openai]`
+
+Settings for `provider = "openai"` and `provider = "openai-compatible"`.
+Unknown keys and unsupported values are rejected at startup.
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `reasoning_effort` | string | omitted | Optional reasoning effort: `"low"`, `"medium"`, `"high"`, `"xhigh"`. Omitted by default to preserve the model's own default. Choose a value supported by the model and endpoint. |
+
 #### `[ai.openai_compat]`
 
 Settings for the OpenAI providers (`provider = "openai"` or `provider = "openai-compatible"`).

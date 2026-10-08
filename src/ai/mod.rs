@@ -528,6 +528,8 @@ pub fn create_provider_from_ai(ai: &AiSettings) -> Result<Arc<dyn AiProvider>> {
                 _ => openai::OpenAiProviderType::OpenAiCompatible,
             };
 
+            let openai_settings = ai.openai.as_ref();
+
             let base_url = ai
                 .openai_compat
                 .as_ref()
@@ -550,6 +552,19 @@ pub fn create_provider_from_ai(ai: &AiSettings) -> Result<Arc<dyn AiProvider>> {
                 .and_then(|c| c.max_tokens)
                 .unwrap_or(4096);
 
+            let reasoning_effort = openai_settings.and_then(|s| s.reasoning_effort.clone());
+
+            if let Some(ref effort) = reasoning_effort {
+                const ALLOWED_REASONING_EFFORTS: &[&str] = &["low", "medium", "high", "xhigh"];
+                if !ALLOWED_REASONING_EFFORTS.contains(&effort.as_str()) {
+                    bail!(
+                        "Invalid reasoning_effort '{}'. Allowed values: {:?}",
+                        effort,
+                        ALLOWED_REASONING_EFFORTS
+                    );
+                }
+            }
+
             let provider = openai::OpenAiCompatClient::new(
                 base_url,
                 provider_type,
@@ -557,6 +572,7 @@ pub fn create_provider_from_ai(ai: &AiSettings) -> Result<Arc<dyn AiProvider>> {
                 context_window,
                 max_tokens,
                 ai.api_timeout_secs,
+                reasoning_effort,
             )?;
 
             Ok(Arc::new(provider))
@@ -1463,5 +1479,25 @@ mod tests {
         assert_eq!(provider.get_capabilities().model_name, "gemini-1.5-flash");
         assert!(nested_db.parent().unwrap().exists());
         Ok(())
+    }
+
+    #[test]
+    fn regression_openai_defaults_to_chat() -> Result<()> {
+        for provider in ["openai", "openai-compatible"] {
+            let ai: crate::settings::AiSettings = toml::from_str(&format!(
+                "provider = '{provider}'\nmodel = 'o1'\n[openai_compat]\nbase_url = 'https://api.openai.com/v1/chat/completions'"
+            ))?;
+            let client = create_provider_from_ai(&ai)?;
+            assert!(client.cache_identity().contains("/chat/completions"));
+            assert!(!client.cache_identity().contains("reasoning_effort="));
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn regression_openai_rejects_unknown_configuration() {
+        assert!(
+            toml::from_str::<crate::settings::OpenAiSettings>("reasoning_efort = 'high'").is_err()
+        );
     }
 }

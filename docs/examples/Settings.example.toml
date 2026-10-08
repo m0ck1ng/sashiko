@@ -7,6 +7,9 @@ temperature = 1.0
 [ai.gemini]
 explicit_prompt_caching = false
 
+# [ai.openai]
+# reasoning_effort = "high"  # Optional: low, medium, high, xhigh; omitted by default
+
 [review]
 # Reviews run concurrently up to this many patches. Sized for one developer's
 # machine; the daemon's own Settings.toml uses a much larger fan-out.

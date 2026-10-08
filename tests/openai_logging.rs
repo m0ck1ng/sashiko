@@ -52,6 +52,7 @@ async fn regression_request_and_usage_logs_include_patch_context() -> Result<()>
                     4096,
                     128,
                     5,
+                    None,
                 )?;
                 client
                     .generate_content(AiRequest {
