@@ -15,7 +15,7 @@
 #![cfg(feature = "server")]
 
 use anyhow::Result;
-use sashiko::ai::openai::{OpenAiCompatClient, OpenAiProviderType};
+use sashiko::ai::openai::{OpenAiApiType, OpenAiCompatClient, OpenAiProviderType};
 use sashiko::ai::{self, AiProvider, AiRequest};
 use serde_json::json;
 
@@ -38,16 +38,22 @@ async fn regression_request_and_usage_logs_include_patch_context() -> Result<()>
             "choices": [{"index": 0, "message": {"role": "assistant", "content": "ok"}, "finish_reason": "stop"}],
             "usage": {"prompt_tokens": 100, "completion_tokens": 20, "total_tokens": 120,
                 "prompt_tokens_details": {"cached_tokens": 101}}
+        })) }))
+        .route("/v1/responses", post(|| async { Json(json!({
+            "status": "completed", "output": [],
+            "usage": {"input_tokens": 100, "output_tokens": 20, "total_tokens": 120,
+                "input_tokens_details": {"cached_tokens": 101}}
         })) }));
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
     let url = format!("http://{}/v1", listener.local_addr()?);
     let server = tokio::spawn(async move { axum::serve(listener, app).await });
     let result: Result<()> = ai::LOG_CONTEXT
         .scope("[patch-review] ".into(), async {
-            {
+            for api in [OpenAiApiType::Chat, OpenAiApiType::Responses] {
                 let client = OpenAiCompatClient::new(
                     url.clone(),
                     OpenAiProviderType::OpenAi,
+                    api,
                     "test".into(),
                     4096,
                     128,
@@ -76,7 +82,7 @@ async fn regression_request_and_usage_logs_include_patch_context() -> Result<()>
         .lines()
         .filter(|line| line.contains("Sending OpenAI") || line.contains("Tokens:"))
         .collect();
-    assert_eq!(relevant.len(), 2, "{recorded}");
+    assert_eq!(relevant.len(), 4, "{recorded}");
     for line in relevant {
         assert!(line.contains("[patch-review] "), "{line}");
         if line.contains("Tokens:") {

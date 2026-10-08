@@ -530,13 +530,29 @@ pub fn create_provider_from_ai(ai: &AiSettings) -> Result<Arc<dyn AiProvider>> {
 
             let openai_settings = ai.openai.as_ref();
 
+            let api_type = match openai_settings.and_then(|s| s.api.as_deref()) {
+                None | Some("chat") => openai::OpenAiApiType::Chat,
+                Some("responses") => openai::OpenAiApiType::Responses,
+                Some(api) => bail!(
+                    "Invalid ai.openai.api '{}'. Allowed values: chat, responses",
+                    api
+                ),
+            };
+
+            let default_base_url = match api_type {
+                openai::OpenAiApiType::Responses => {
+                    openai::OpenAiCompatClient::default_base_url_for_responses()
+                }
+                openai::OpenAiApiType::Chat => {
+                    openai::OpenAiCompatClient::default_base_url_for_model(&ai.model)
+                }
+            };
+
             let base_url = ai
                 .openai_compat
                 .as_ref()
                 .and_then(|c| c.base_url.clone())
-                .unwrap_or_else(|| {
-                    openai::OpenAiCompatClient::default_base_url_for_model(&ai.model)
-                });
+                .unwrap_or(default_base_url);
 
             let context_window = ai
                 .openai_compat
@@ -568,6 +584,7 @@ pub fn create_provider_from_ai(ai: &AiSettings) -> Result<Arc<dyn AiProvider>> {
             let provider = openai::OpenAiCompatClient::new(
                 base_url,
                 provider_type,
+                api_type,
                 ai.model.clone(),
                 context_window,
                 max_tokens,
@@ -1499,5 +1516,33 @@ mod tests {
         assert!(
             toml::from_str::<crate::settings::OpenAiSettings>("reasoning_efort = 'high'").is_err()
         );
+    }
+
+    #[test]
+    fn regression_openai_rejects_unknown_api() -> Result<()> {
+        let ai = toml::from_str("provider = 'openai'\nmodel = 'o1'\n[openai]\napi = 'response'")?;
+        assert!(create_provider_from_ai(&ai).is_err());
+        Ok(())
+    }
+
+    #[test]
+    fn regression_openai_explicit_responses_requires_matching_url() -> Result<()> {
+        let ai = toml::from_str("provider = 'openai'\nmodel = 'o1'\n[openai]\napi = 'responses'")?;
+        assert!(
+            create_provider_from_ai(&ai)?
+                .cache_identity()
+                .contains("/responses")
+        );
+        let ai = toml::from_str(
+            "provider = 'openai'\nmodel = 'o1'\n[openai]\napi = 'responses'\n[openai_compat]\nbase_url = 'https://api.openai.com/v1/chat/completions'",
+        )?;
+        assert!(
+            create_provider_from_ai(&ai)
+                .err()
+                .unwrap()
+                .to_string()
+                .contains("configure /responses or a base URL")
+        );
+        Ok(())
     }
 }

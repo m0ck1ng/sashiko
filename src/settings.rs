@@ -373,6 +373,7 @@ pub struct OpenAiCompatSettings {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct OpenAiSettings {
+    pub api: Option<String>,
     pub reasoning_effort: Option<String>,
 }
 

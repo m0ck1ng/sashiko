@@ -8,6 +8,7 @@ temperature = 1.0
 explicit_prompt_caching = false
 
 # [ai.openai]
+# api = "chat"  # Default for both OpenAI providers; opt in with "responses"
 # reasoning_effort = "high"  # Optional: low, medium, high, xhigh; omitted by default
 
 [review]
