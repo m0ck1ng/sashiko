@@ -347,9 +347,18 @@ impl OpenAiCompatClient {
             })?;
             match serde_json::from_str::<OpenAiResponse>(&body_text) {
                 Ok(response) => {
+                    let cached = response
+                        .usage
+                        .prompt_tokens_details
+                        .as_ref()
+                        .and_then(|details| details.cached_tokens)
+                        .filter(|&cached| cached <= response.usage.prompt_tokens)
+                        .unwrap_or(0);
                     tracing::info!(
-                        "OpenAI response received. Tokens: in={}, out={}",
-                        response.usage.prompt_tokens,
+                        "{}OpenAI response received. Tokens: in={}, cached={}, out={}",
+                        crate::ai::get_log_prefix(),
+                        response.usage.prompt_tokens.saturating_sub(cached),
+                        cached,
                         response.usage.completion_tokens
                     );
                     return Ok(response);
@@ -578,11 +587,7 @@ fn translate_ai_response(resp: OpenAiResponse) -> Result<AiResponse> {
         prompt_tokens: resp.usage.prompt_tokens as usize,
         completion_tokens: resp.usage.completion_tokens as usize,
         total_tokens: resp.usage.total_tokens as usize,
-        cached_tokens: if cached > 0 {
-            Some(cached as usize)
-        } else {
-            None
-        },
+        cached_tokens: Some(cached as usize),
     });
 
     Ok(AiResponse {
@@ -598,7 +603,10 @@ fn translate_ai_response(resp: OpenAiResponse) -> Result<AiResponse> {
 #[async_trait]
 impl AiProvider for OpenAiCompatClient {
     async fn generate_content(&self, request: AiRequest) -> Result<AiResponse> {
-        tracing::info!("Sending OpenAI request...");
+        tracing::info!(
+            "{}Sending OpenAI Chat Completions request...",
+            crate::ai::get_log_prefix()
+        );
 
         let mut openai_req = self.prepare_request(request)?;
         let resp_body = serde_json::to_value(&openai_req)?;
@@ -1152,7 +1160,7 @@ mod tests {
         assert_eq!(usage.prompt_tokens, 10);
         assert_eq!(usage.completion_tokens, 20);
         assert_eq!(usage.total_tokens, 30);
-        assert_eq!(usage.cached_tokens, None);
+        assert_eq!(usage.cached_tokens, Some(0));
 
         Ok(())
     }
@@ -1214,7 +1222,7 @@ mod tests {
         };
 
         let usage = translate_ai_response(openai_resp)?.usage.unwrap();
-        assert_eq!(usage.cached_tokens, None);
+        assert_eq!(usage.cached_tokens, Some(0));
 
         Ok(())
     }
@@ -1301,7 +1309,7 @@ mod tests {
         // An endpoint reporting the prefix alongside prompt_tokens offers no
         // usable breakdown, so the whole prompt stays uncached input.
         let usage = translate_ai_response(openai_resp)?.usage.unwrap();
-        assert_eq!(usage.cached_tokens, None);
+        assert_eq!(usage.cached_tokens, Some(0));
         assert_eq!(usage.prompt_tokens, 2048);
 
         Ok(())

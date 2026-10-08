@@ -315,8 +315,9 @@ pub struct AiUsage {
     /// Number of tokens served from cache.  A breakdown of `prompt_tokens`
     /// rather than an addend: a consumer subtracts it to get uncached input.
     /// A provider whose API reports the cached prefix outside its prompt
-    /// total folds it in before filling these fields.  None when the
-    /// provider reports no cache hit.
+    /// total folds it in before filling these fields. None when the provider
+    /// does not supply cache accounting; some providers normalize missing
+    /// or unusable counts to Some(0).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cached_tokens: Option<usize>,
 }
